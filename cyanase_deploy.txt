@@ -1,0 +1,305 @@
+key phrase: K62&5ben
+The key fingerprint is:
+SHA256:WnsHEh4ZT+hZka/3kFEUQRIAD3Mj8Br09YyOcXTCuMs walulyafrancis@cs-900470006864-default
+The key's randomart image is:
++---[RSA 3072]----+
+|      o.*=X+++=o |
+|     . oo&+B ..  |
+|      ..B+=.o.   |
+|       ++B  o    |
+|      ..S.o. o   |
+|       oEo..+    |
+|      . . ...o   |
+|         . .  .  |
+|                 |
++----[SHA256]-----+
+Your public key has been saved in /home/walulyafrancis/.ssh/google_compute_engine.pub
+Updating project ssh metadata...working..Updated [https://www.googleapis.com/compute/v1/projects/cyanase].   
+Warning: Permanently added 'compute.2502291157146223874' (ECDSA) to the list of known hosts.
+Enter passphrase for key '/home/walulyafrancis/.ssh/google_compute_engine': 
+----------------------------------------------------------------------
+WEB MIN
+--------------------------------
+https://34.136.11.124:10000/ - webmin
+http://34.136.11.124/
+--------------------------------
+IP: 34.136.11.124
+username: root
+password: K62&5ben
+-----------------------------------
+sudo apt update
+sudo apt install nginx
+---------------------------------
+sudo ufw app list
+-------------------------------
+sudo ufw allow 'Nginx HTTP'
+You can verify the change by typing:
+
+sudo ufw status
+
+sudo systemctl stop nginx
+
+sudo systemctl start nginx
+
+sudo systemctl restart nginx
+
+sudo systemctl reload nginx
+-------------------------------
+DATABASE
+--------------------------------
+default user: root
+password: K62&5ben
+-------------------
+REMOTE user
+---------------------
+USER: root
+Crypto: Udbz.xC638L)BiE
+--------------------------------
+PATH : /var/www/html/cyanase.com
+----------------------------------
+apt update
+apt intsall python3-pip
+pip3 install virtualenv
+cd project_folder
+virtualenv venv -p python3
+source venv/bin/activate
+apt install python3-dev
+apt install libmysqlclient-dev
+apt install libmariadbclient-dev or apt-get install -y libmariadb-dev
+pip install mysqlclient
+apt-get install python3-tk
+#########################
+34.136.11.124:8000
+#############################
+--------------------------------------------
+nano /etc/systemd/system/gunicorn.socket
+----------------------------------------------
+[Unit]
+Description=gunicorn socket
+
+[Socket]
+ListenStream=/run/gunicorn.sock
+
+[Install]
+WantedBy=sockets.target
+----------------------------------------
+nano /etc/systemd/system/gunicorn.service
+-----------------------------------------------
+[Unit]
+Description=gunicorn daemon
+Requires=gunicorn.socket
+After=network.target
+
+[Service]
+User=admin
+Group=www-data
+WorkingDirectory=/var/www/html/cyanase.com/src
+ExecStart=/var/www/html/cyanase.com/venv/bin/gunicorn \
+          --access-logfile - \
+          -k uvicorn.workers.UvicornWorker \
+          --workers 3 \
+          --bind unix:/run/gunicorn.sock \
+          iwatchtms.asgi:application
+
+[Install]
+WantedBy=multi-user.target
+----------------------------------------
+-----------------------------
+sudo systemctl start gunicorn.socket
+sudo systemctl enable gunicorn.socket
+sudo systemctl status gunicorn
+sudo systemctl status gunicorn
+sudo systemctl daemon-reload
+sudo systemctl restart gunicorn
+----------------------------------------
+
+
+###############################################
+####################################################
+###################################################
+NGINX
+nginx -t
+systemctl restart nginx
+
+gunicorn --bind 0.0.0.0:8000 cyanase_api.asgi -w 4 -k uvicorn.workers.UvicornWorker
+gunicorn --bind 0.0.0.0:8000 cyanase_api.asgi -w 4 -k uvicorn.workers.UvicornWorker
+kill -9 $(lsof -i:8000 -t) 2> /dev/null
+uvicorn cyanase_api.asgi:application --host 0.0.0.0 --port 8080
+
+
+nano /etc/systemd/system/gunicorn.socket
+----------------------------------------------
+[Unit]
+Description=gunicorn socket
+
+[Socket]
+ListenStream=/run/gunicorn.sock
+
+[Install]
+WantedBy=sockets.target
+----------------------------------------
+nano /etc/systemd/system/gunicorn.service
+-----------------------------------------------
+###########################################
+----------------------------------------------------
+[Unit]
+Description=gunicorn daemon
+Requires=gunicorn.socket
+After=network.target
+
+[Service]
+User=root
+Group=root
+WorkingDirectory=/var/www/html/cyanase.com/src
+ExecStart=/var/www/html/cyanase.com/venv/bin/gunicorn \
+          --access-logfile - \
+          -k uvicorn.workers.UvicornWorker \
+          --workers 3 \
+          --bind unix:/run/gunicorn.sock \
+          cyanase_api.wsgi:application
+
+[Install]
+WantedBy=multi-user.target
+
+-----------------------------
+sudo systemctl start gunicorn.socket
+sudo systemctl enable gunicorn.socket
+sudo systemctl status gunicorn
+sudo systemctl status gunicorn
+sudo systemctl daemon-reload
+sudo systemctl restart gunicorn
+----------------------------------------
+Add an Existing Ubuntu User into Multiple Groups
+sudo useradd -g group -G group1,group2 username
+sudo usermod -a -G first_group, second_group username
+sudo usermod -a -G sam-pc, sudo, sambashare Samrina
+Remove an Existing User from a Group in Ubuntu
+$ sudo gpasswd -d Samrina sambashare
+-------------------------------------------------------------------------------------------
+ "default": {
+        "ENGINE": "django.db.backends.mysql",
+        "OPTIONS": {
+            'sql_mode': 'traditional',
+            "init_command": "ALTER DATABASE cyanase CHARACTER SET utf8mb4 COLLATE utf8mb4_general_ci",
+        },
+        "NAME": "cyanase",
+        "USER": "root",
+        "PASSWORD": "K62&5ben",
+        "HOST": "127.0.0.1",
+        "PORT": "3306",
+  }
+----------------------------------------------------------------------------------------------------
+'OPTIONS': {
+            'sql_mode': 'traditional',
+            "init_command": "SET foreign_key_checks = 0;"
+        },
+
+mysql -u root -p
+use mysql；
+ALTER USER 'root@localhost IDENTIFIED WITH mysql_native_password BY K62&5ben';  
+FLUSH PRIVILEGES;
+----------------------------------------------------------------------------------
+ALTER USER 'root'@'localhost' IDENTIFIED WITH mysql_native_password BY 'K62&5ben';  
+FLUSH PRIVILEGES;
+----------------------------------------------------------------------------------
+gunicorn --bind 0.0.0.0:8000 cyanase_api.wsgi
+---------------------------------------------------------------------------------
+
+[Unit]
+Description=gunicorn daemon
+Requires=gunicorn.socket
+After=network.target
+
+[Service]
+User=root
+Group=www-data
+WorkingDirectory=/var/www/html/cyanase.com/src
+ExecStart=/var/www/html/cyanase.com/venv/bin/gunicorn \
+          --access-logfile - \
+          --workers 3 \
+          --bind unix:/run/gunicorn.sock \
+          cyanase_api.wsgi:application
+
+[Install]
+WantedBy=multi-user.target
+--------------------------------------------------------
+sudo systemctl start gunicorn.socket
+sudo systemctl enable gunicorn.socket
+sudo systemctl status gunicorn.socket
+file /run/gunicorn.sock
+----------------------------------------------------------
+sudo journalctl -u gunicorn.socket
+curl --unix-socket /run/gunicorn.sock localhost
+
+To test the socket activation mechanism, you can send a connection to the socket through curl by typing:
+
+curl --unix-socket /run/gunicorn.sock localhost
+You should receive the HTML output from your application in the terminal. This indicates that Gunicorn was started and was able to serve your Django application. You can verify that the Gunicorn service is running by typing:
+
+sudo systemctl status gunicorn
+------------------------------------------------------------
+NGINX
+------------------------------------------------------------
+nano /etc/nginx/sites-available/cyanase
+--------------------------------------------------------------
+server {
+    listen 80;
+    server_name 34.136.11.124;
+
+    access_log /var/www/html/cyanase.com/site/logs/cyanase.com.log;
+    error_log  /var/www/html/cyanase.com/site/logs/cyanase.com.error.log warn;
+
+    location = /favicon.ico { access_log off; log_not_found off; }
+    location /static/ {
+        root /var/www/html/cyanase.com/src;
+    }
+
+    location /media/ {
+        root /var/www/html/cyanase.com/src;
+    }
+
+    location / {
+        include proxy_params;
+        proxy_pass http://unix:/run/gunicorn.sock;
+    }
+}
+
+server {
+    listen 443 http2 ssl;
+    listen [::]:443 http ssl;
+    server_name 34.136.11.124;
+
+
+    ssl_certificate /certificate_path;
+    ssl_certificate_key /certificate_key_path;
+    access_log /var/www/html/cyanase.com/site/logs/cyanase.com.log;
+    error_log  /var/www/html/cyanase.com/site/logs/cyanase.com.error.log warn;
+    location = /favicon.ico { access_log off; log_not_found off; }
+    location /static/ {
+        root /var/www/html/cyanase.com/src;
+    }
+
+    location /media/ {
+        root /var/www/html/cyanase.com/src;
+    }
+
+    location / {
+        include proxy_params;
+        proxy_pass http://unix:/run/gunicorn.sock;
+    }
+}
+/home/admin/domains/iwatchtms.com/public_html/site/public/static
+-----------------------------------------------------------------------
+nano /etc/nginx/sites-available/cyanase
+---------------------------------------------
+sudo ln -s /etc/nginx/sites-available/cyanase /etc/nginx/sites-enabled
+--------------------------------
+/var/www/html/cyanase.com/src/static/
+
+
+chmod -R 777 /var/www/
+
+website: http://34.136.11.124/
+http://34.136.11.124/admin/
+username: admin
+password: K62&5ben

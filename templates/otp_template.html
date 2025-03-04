@@ -1,0 +1,21 @@
+{% autoescape off %}
+<meta name=viewport content="width=device-width,initial-scale=1">
+<style>div{font-family:Helvetica}#screen{padding-left:10%;padding-right:10%;background-color:#e6e6e6}@media screen and (max-width:500px){#screen{padding-left:0;padding-right:0}}</style>
+<div class=text-center id=screen>
+<div style=background-color:#fff>
+<img src=https://server.cyanase.app/static/password.png width=100%></div>
+<div style=padding:5%;background-color:#fafafa;line-height:17px;font-size:15px>
+<p class=left>Hello {{ name }} <br> This is your one-time-password</p>
+<h1>{{otp}}</h1>
+<p class=left>Click the link below to reset your password</p>
+<p class=left>If this email was intended for you, please click the link below to reset your investors account password.</p>
+<h5><a href=https://auth.cyanase.app/password/reset/?email={{ email }}&ref={{ encrypted_userid }} style=color:#fff;background-color:orange;padding:10px;padding-right:40px;text-decoration:none;padding-left:40px>
+RESET PASSWORD</a></h5>
+<p class=left>If this email was sent to you by mistake, please ignore the email or contact support for more information.</p>
+<h5 style="border-top:3px solid #000;text-align:center">
+<p>
+visit our website:<br> <a style=color:#000;line-height:5px href=https://cyanase.com>cyanase</a></p>
+</h5>
+</div>
+</div>
+{% endautoescape %} 

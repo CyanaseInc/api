@@ -1,0 +1,15 @@
+{% autoescape off %}
+<meta name=viewport content="width=device-width,initial-scale=1">
+<style>div{font-family:Helvetica}#screen{padding-left:10%;padding-right:10%;background-color:#e6e6e6}@media screen and (max-width:500px){#screen{padding-left:0;padding-right:0}}</style>
+<div class=text-center id=screen>
+<div style=padding:5%;background-color:#fafafa;line-height:17px;font-size:15px>
+<p class=left><h2>Hi Mark</h2> <br> A new user has registered onto the platform with the following details:<br/></p>
+<p>First Name: {{user.first_name}}<br/>Last Name: {{user.last_name}}<br/>Phone Number: {{user.profile.phoneno}}<br/>Email: {{user.email}}<br/>Country: {{user.profile.country}}</p>
+<p class=left>You may proceed with further actions required.</p>
+<h5 style="border-top:3px solid #000;text-align:center">
+</h5>
+<p>This is a no-reply automated message
+    <br/>Regards<br/>Cyanase Team</p>
+</div>
+</div>
+{% endautoescape %}

@@ -1,0 +1,43 @@
+server {
+    listen 80;
+    server_name auth.cyanase.lol;
+
+}
+
+server {
+    listen 443 ssl;
+    server_name auth.cyanase.lol;
+
+    root /var/www/html/cyanase.com/auth/build;
+    index index.html;
+
+    # ssl_certificate /etc/letsencrypt/live/auth.cyanase.lol/fullchain.pem;
+    # ssl_certificate_key /etc/letsencrypt/live/auth.cyanase.lol/privkey.pem;
+    listen [::]:443 ssl ipv6only=on; # managed by Certbot
+    listen 443 ssl; # managed by Certbot
+    ssl_certificate /etc/letsencrypt/live/server.cyanase.lol/fullchain.pem; # managed by Certbot
+    ssl_certificate_key /etc/letsencrypt/live/server.cyanase.lol/privkey.pem; # managed by Certbot
+    include /etc/letsencrypt/options-ssl-nginx.conf; # managed by Certbot
+    ssl_dhparam /etc/letsencrypt/ssl-dhparams.pem; # managed by Certbot
+    
+
+    location / {
+        try_files $uri $uri/ /index.html;
+    }
+
+    server {
+        if ($host = auth.cyanase.lol) {
+        return 301 https://$host$request_uri;
+    } # managed by Certbot
+
+
+
+        listen 80;
+
+        listen [::]:80;
+
+        server_name auth.cyanase.lol;
+    return 404; # managed by Certbot
+
+
+}
