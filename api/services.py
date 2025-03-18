@@ -1,7 +1,11 @@
 import datetime
+import logging
+import json
+from django.utils import timezone
+from django.db import transaction, IntegrityError
 import os
 import random
-from .models import Deposit, AccountType, Goal, Subscription, Withdraw, RiskProfile, Networth, NextOfKin, InvestmentOption, InvestmentPerformance, RiskAnalysis, BankTransaction, UserProfile, InvestmentClass, InvestmentTrack, Transaction
+from .models import Deposit, AccountType, Goal, Group,Participant, Subscription, Withdraw, RiskProfile, Networth, NextOfKin, InvestmentOption, InvestmentPerformance, RiskAnalysis, BankTransaction, UserProfile, InvestmentClass, InvestmentTrack, Transaction
 from .helper.helper import Helper
 # from .v1.locale import Locale
 from django.contrib.auth.models import User
@@ -9,27 +13,30 @@ import requests
 import uuid
 from collections import defaultdict
 import itertools
+from rest_framework.response import Response
+from django.core.files.storage import default_storage
 # import os
 from cyanase_api import settings
 from api.config import webconfig
 from django.db.models import Sum, Max
+from django.core.exceptions import ObjectDoesNotExist
 from datetime import date
 # live
 DEPOSIT_SEC_KEY = ""
 SUB_SEC_KEY = ""
 
 # sandbox
-# SUB_SEC_KEY = "FLWSECK_TEST-abba21c766a57acb5a818a414cd69736-X"
-# DEPOSIT_SEC_KEY = "FLWSECK_TEST-ce0f1efc8db1d85ca89adb75bbc1a3c8-X"
+# SUB_SEC_KEY = ""
+# DEPOSIT_SEC_KEY = ""
 
 BEARER_INVESTORS = DEPOSIT_SEC_KEY
 BEARER_SAVERS = SUB_SEC_KEY
 
-BEARER_RLX = "afb465fe38693d.5mCTE0W4MJvUHQS3tNzlww"
+BEARER_RLX = ""
 
 
 _helper = Helper()
-
+logger = logging.getLogger(__name__)
 
 class TransactionRef:
     def getTxRef(self):
@@ -1577,6 +1584,288 @@ class Transactions:
             }
 
 
+
+
+class Groups:
+    def __init__(self):
+        self.help = Helper()
+
+    def createGroup(self, request, lang, user=None):
+        try:
+            # Extract data from the request
+            group_name = request.data.get("name")
+            group_description = request.data.get("description", "")
+            profile_pic = request.FILES.get("profile_pic")
+            created_by_id = request.data.get("created_by")
+            participants = json.loads(request.data.get("participants", "[]"))
+
+            # Validate required fields
+            if not group_name:
+                return {
+                    "message": "Group name is required",
+                    "success": False
+                }
+            if not created_by_id:
+                return {
+                    "message": "Creator ID is required",
+                    "success": False
+                }
+
+            # Fetch the creator
+            try:
+                created_by = User.objects.get(pk=created_by_id)
+                print(f"Creator fetched: {created_by}")
+            except User.DoesNotExist:
+                logger.error(f"Invalid creator ID: {created_by_id}")
+                return {
+                    "message": "Invalid creator ID",
+                    "success": False
+                }
+
+            # Handle profile picture upload (if provided)
+            profile_pic_path = None
+            if profile_pic:
+                try:
+                    profile_pic_path = default_storage.save(
+                        f"group_pics/{profile_pic.name}", profile_pic
+                    )
+                
+                except Exception as e:
+                    logger.error(f"Failed to save profile picture: {str(e)}")
+                    return {
+                        "message": f"Error saving profile picture: {str(e)}",
+                        "success": False
+                    }
+
+            # Use a transaction to ensure all or nothing is saved
+            with transaction.atomic():
+                # Create the Group instance
+                group = Group(
+                    name=group_name,
+                    description=group_description,
+                    profile_pic=profile_pic_path if profile_pic_path else None,
+                    created_by=created_by,
+                    created_at=timezone.now(),
+                    last_activity=timezone.now()
+                )
+                group.save()
+              
+                # Save the creator as an admin participant
+                admin_participant = Participant(
+                    group=group,
+                    user=created_by,
+                    role='admin',
+                    joined_at=timezone.now(),
+                    muted=False
+                )
+                admin_participant.save()
+               
+
+                # Save other participants
+                for participant_data in participants:
+                    user_id = participant_data.get("user_id")
+                    role = participant_data.get("role", "member")
+
+                    if user_id == str(created_by.id):
+                        print(f"Skipping creator {user_id} as already added as admin")
+                        continue
+
+                    try:
+                        participant_user = User.objects.get(id=user_id)
+                        participant = Participant(
+                            group=group,
+                            user=participant_user,
+                            role=role,
+                            joined_at=timezone.now(),
+                            muted=False
+                        )
+                        participant.save()
+                        print(f"Participant {user_id} saved with role: {role}")
+                    except User.DoesNotExist:
+                        logger.warning(f"User with ID {user_id} not found, skipping participant")
+                    except IntegrityError as e:
+                        logger.error(f"Integrity error for participant {user_id}: {str(e)}")
+                        raise  # Re-raise to rollback the transaction
+
+            # Return success response with group ID
+            return {
+                "message": "Group created successfully",
+                "success": True,
+                "groupId": group.id
+            }
+
+        except IntegrityError as e:
+            logger.error(f"Database integrity error: {str(e)}")
+            return {
+                "message": f"Database error creating group: {str(e)}",
+                "success": False
+            }
+        except Exception as e:
+            logger.error(f"Unexpected error creating group: {str(e)}")
+            return {
+                "message": f"Error creating group: {str(e)}",
+                "success": False
+            }
+    
+    def getGroup(self, request, lang, user=None):
+        
+        
+        try:
+            user_id = request.user.id
+            
+            user_participations = Participant.objects.filter(user_id=user_id).select_related('group')
+            group_list = []
+
+            # Use a set to avoid duplicate groups (if user has multiple roles, though unlikely)
+            group_ids = set(participation.group.id for participation in user_participations)
+
+            for group_id in group_ids:
+                group = Group.objects.get(id=group_id)
+                # Fetch all participants for this group
+                participants = Participant.objects.filter(group_id=group_id).select_related('user')
+                participant_list = [
+                    {
+                        "user_id": str(participant.user.id),
+                        "role": participant.role,
+                        "joined_at": participant.joined_at.strftime("%Y-%m-%d %H:%M:%S"),
+                        "muted": participant.muted
+                    }
+                    for participant in participants
+                ]
+
+                group_data = {
+                    "groupId": group.id,
+                    "name": group.name,
+                    "description": group.description,
+                    "profile_pic": f"{group.profile_pic.url}" if group.profile_pic else "",
+                    "created_at": group.created_at.strftime("%Y-%m-%d %H:%M:%S"),
+                    "created_by": str(group.created_by.id),
+                    "last_activity": group.last_activity.strftime("%Y-%m-%d %H:%M:%S"),
+                    "participants": participant_list
+                }
+                group_list.append(group_data)
+
+            return {
+                "success": True,
+                "data": group_list,
+                "message": "Groups retrieved successfully"
+            }
+
+        except Exception as e:
+            logger.error(f"Error retrieving groups for user {user_id}: {str(e)}")
+            return {
+                "success": False,
+                "message": f"Error retrieving groups: {str(e)}",
+            }
+   
+    def addMembers(self, request, lang, user=None):
+        try:
+            # Extract data from the request
+            group_id = request.data.get("groupid")
+            participants = json.loads(request.data.get("participants", "[]"))
+
+            group = Group.objects.get(pk=group_id)
+            # Use a transaction to ensure all or nothing is saved
+            with transaction.atomic():
+                added_count = 0
+            for participant_data in participants:
+                user_id = participant_data.get("user_id")
+                role = participant_data.get("role", "member")
+
+                if not user_id:
+                    logger.warning("Skipping participant with no user_id")
+                    continue
+                try:
+                    participant_user = User.objects.get(id=user_id)
+                    # Check if participant already exists to avoid duplicates
+                    if not Participant.objects.filter(group=group, user=participant_user).exists():
+                        participant = Participant(
+                            group=group,
+                            user=participant_user,
+                            role=role,
+                            joined_at=timezone.now(),
+                            muted=False
+                        )
+                        participant.save()
+                        added_count += 1
+                        logger.info(f"Participant {user_id} added with role: {role}")
+                    else:
+                        logger.info(f"Participant {user_id} already in group, skipping")
+                except User.DoesNotExist:
+                    logger.warning(f"User with ID {user_id} not found, skipping participant")
+                except IntegrityError as e:
+                    logger.error(f"Integrity error for participant {user_id}: {str(e)}")
+                # Create the Group instance
+              
+        
+             
+            # Return success response with group ID
+            return {
+                "message": "Group created successfully",
+                "success": True,
+                
+            }
+
+        except IntegrityError as e:
+            logger.error(f"Database integrity error: {str(e)}")
+            return {
+                "message": f"Database error creating group: {str(e)}",
+                "success": False
+            }
+        except Exception as e:
+            logger.error(f"Unexpected error creating group: {str(e)}")
+            return {
+                "message": f"Error creating group: {str(e)}",
+                "success": False
+            }
+    
+   
+    def editGroup(self, request, lang, user):
+        # Extract data from the request
+        try:
+            group_id = request.data.get("groupid")  # Match 'groupid' from Flutter
+            name = request.data.get("name")         # Match 'name' from Flutter
+            description = request.data.get("description")  # Match 'description' from Flutter
+
+            # Validate required fields
+            if not group_id or not name:
+                return {
+                    "message": "groupid and name are required",
+                    "success": False
+                }
+
+            # Fetch the group
+            group = Group.objects.get(pk=group_id)
+
+            # Update group fields
+            group.name = name
+            group.description = description if description is not None else group.description  # Preserve existing if not provided
+            group.save()
+
+        # Return success response as a dictionary
+            return {
+                "message": f"Group '{name}' updated successfully",
+                "success": True,
+                "group_id": group_id,
+                "group": {
+                "id": group.id,
+                "name": group.name,
+                "description": group.description
+                }
+            }
+
+        except ObjectDoesNotExist:
+           return {
+                "message": f"Group with id {group_id} not found",
+                "success": False
+            }
+        except Exception as e:
+            return {
+                "message": f"Error updating group: {str(e)}",
+                "success": False
+            }
+      
+            
 class Goals:
     def __init__(self):
         self.help = Helper()
@@ -1617,7 +1906,8 @@ class Goals:
                 "message": "your account is not verified, please check your email and verify",
                 "success": False
             }
-
+    
+    
     def getGoalById(self, request, lang, goalid):
         if Goal.objects.filter(pk=goalid).exists():
             goal = Goal.objects.filter(pk=goalid).get()
@@ -1701,21 +1991,18 @@ class Goals:
     
     def editGoal(self, request, lang, user):
     
-        """Edit an existing goal."""
-        print(request.data)    
+        
+        
          # Extract data from the request
         goal_id = request.data["goal_id"]
         goal_name = request.data["goal_name"]
         goal_image = request.FILES.get("goal_image") # For file uploads
+        print('my gola is',goal_id)
         try:
-            if not Goal.objects.filter(pk=goal_id, user=user).exists():
-                return {
-                    "message": "Goal not found or you don’t have permission to edit it",
-                    "success": False
-                }
-
-            goal = Goal.objects.get(pk=goal_id, user=user)
-
+           
+            goal = Goal.objects.get(pk=goal_id)
+            print (goal)
+    
             # Update goal_name
             goal.goal = goal_name
             goal.save()
@@ -1738,6 +2025,28 @@ class Goals:
                 "message": f"Error updating goal: {str(e)}",
                 "success": False
             }  
+    
+    def deleteGoal(self, request, lang, user):
+        try:
+        # Assuming the goal ID is passed in the request body
+            goal_id = request.data.get('goal_id')
+        
+            if not goal_id:
+                return Response({"error": "Goal ID is required"}, status=400)
+        
+        # Fetch the goal from the database
+            goal = Goal.objects.filter(pk=goal_id).first()
+        
+            if not goal:
+                return Response({"error": "Goal not found"}, status=404)
+        
+        # Delete the goal
+            goal.delete()
+        
+            return Response({"success": "Goal deleted successfully"}, status=200)
+    
+        except Exception as e:
+           return Response({"error": str(e)}, status=500)
 
 
 class NextOfKins:

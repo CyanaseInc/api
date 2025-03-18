@@ -6,7 +6,7 @@ from rest_framework.views import APIView
 from rest_framework.authtoken.views import ObtainAuthToken
 from rest_framework.authtoken.models import Token
 from .v1.users.Users import Users
-from .services import Deposits, Goals, NextOfKins, RiskProfiles, Withdraws, Networths, BankTransactions, Subscriptions, TransactionRef, AccountTypes, InvestmentOptions, InvestmentClasses, InvestmentTracks, Transactions
+from .services import Deposits, Goals,Groups, NextOfKins, RiskProfiles, Withdraws, Networths, BankTransactions, Subscriptions, TransactionRef, AccountTypes, InvestmentOptions, InvestmentClasses, InvestmentTracks, Transactions
 from django.contrib.auth.models import User
 from rave_python import Rave, RaveExceptions,Misc
 import os
@@ -27,21 +27,22 @@ import json
 
 DEFAULT_LANG = "en"
 # sandbox
-# DEPOSIT_PUB_KEY = "FLWPUBK_TEST-955232eaa38c733225e42cee9597d1ca-X"
-# DEPOSIT_SEC_KEY = "FLWSECK_TEST-ce0f1efc8db1d85ca89adb75bbc1a3c8-X"
-# SUB_PUB_KEY = "FLWPUBK_TEST-99f83b787d32f5195dcf295dce44c3ab-X"
-# SUB_SEC_KEY = "FLWSECK_TEST-abba21c766a57acb5a818a414cd69736-X"
+# DEPOSIT_PUB_KEY = ""
+# DEPOSIT_SEC_KEY = ""
+# SUB_PUB_KEY = ""
+# SUB_SEC_KEY = ""
 
 # live
-DEPOSIT_PUB_KEY = "FLWPUBK-b248048d7e363a0497a7bf525c43d822-X"
-DEPOSIT_SEC_KEY = "FLWSECK-5c09157bff6ad1b4dc72207be91f6efe-X"
-SUB_PUB_KEY = "FLWPUBK-2f0d88d10a57d95acfd495bb18b32d43-X"
-SUB_SEC_KEY = "FLWSECK-141bf374414b8733059148caa69def01-X"
+DEPOSIT_PUB_KEY = ""
+DEPOSIT_SEC_KEY = ""
+SUB_PUB_KEY = ""
+SUB_SEC_KEY = ""
 
 _user = Users()
 _deposit = Deposits()
 _withdraw = Withdraws()
 _goal = Goals()
+_group = Groups()
 _nextOfKin = NextOfKins()
 _riskprofile = RiskProfiles()
 _networth = Networths()
@@ -864,7 +865,7 @@ class EditGoalz(APIView):
         lang = DEFAULT_LANG if lang is None else lang
         goal_name = request.data["goal_name"]
         
-  
+       
        
         if not goal_name:
             return Response({
@@ -876,9 +877,70 @@ class EditGoalz(APIView):
         else:
             goali = _goal.editGoal(request, lang, user)
             # goalid = goal["goalid"]
-            if goal["success"] is True:
+            if goali["success"] is True:
                 return Response({
                     "message": "Goal created successfully",
+                    "success": True
+                })
+            else:
+                return Response({
+                    "message": goali['message'],
+                    "success": False
+                })
+class EditGroup(APIView):
+    authentication_classes = [SessionAuthentication, TokenAuthentication]
+    permission_classes = [IsAuthenticated]
+    http_method_names = ['post']
+
+    def post(self, request, lang, *args, **kwargs):
+        user = _user.getAuthUser(request, lang)
+        lang = DEFAULT_LANG if lang is None else lang
+        group_name = request.data.get("name")  # Match Flutter's 'name'
+
+        if not group_name:
+            return Response({
+                "message": "This field is required",
+                "success": False,
+            }, status=400)
+        else:
+            data = _group.editGroup(request, lang, user)
+            if data["success"] is True:
+                return Response({
+                    "message": "Group updated successfully",
+                    "success": True
+                }, status=200)
+            else:
+                return Response({
+                    "message": data["message"],
+                    "success": False
+                }, status=400)
+
+           
+class NewGroup(APIView):
+    authentication_classes = [SessionAuthentication, TokenAuthentication]
+    permission_classes = [IsAuthenticated]
+    http_method_names = ['post']
+
+    def post(self, request, lang, *args, **kwargs):
+        user = _user.getAuthUser(request, lang)
+        lang = DEFAULT_LANG if lang is None else lang
+        group_name = request.data["name"]
+        
+       
+       
+        if not group_name:
+            return Response({
+                "message": "This field is required",
+                "success": False,
+                "type": "goal name"
+            })
+     
+        else:
+            goali = _group.createGroup(request, lang, user)
+            # goalid = goal["goalid"]
+            if goali["success"] is True:
+                return Response({
+                    "data": goali,
                     "success": True
                 })
             else:
@@ -886,7 +948,98 @@ class EditGoalz(APIView):
                     "message": goali,
                     "success": False
                 })
-    
+class GetGroup(APIView):
+    authentication_classes = [SessionAuthentication, TokenAuthentication]
+    permission_classes = [IsAuthenticated]
+    http_method_names = ['post']
+
+    def post(self, request, lang, *args, **kwargs):
+        user = _user.getAuthUser(request, lang)
+        lang = DEFAULT_LANG if lang is None else lang
+       
+        
+     
+        goali = _group.getGroup(request, lang, user)
+            # goalid = goal["goalid"]
+        if goali["success"] is True:
+                return Response({
+                    "data": goali,
+                    "success": True
+                })
+        else:
+                return Response({
+                    "message": goali,
+                    "success": False
+                })
+class AddMembers(APIView):
+    authentication_classes = [SessionAuthentication, TokenAuthentication]
+    permission_classes = [IsAuthenticated]
+    http_method_names = ['post']
+
+    def post(self, request, lang, *args, **kwargs):
+        user = _user.getAuthUser(request, lang)
+        lang = DEFAULT_LANG if lang is None else lang
+        group_id = request.data["groupid"]
+        
+       
+       
+        if not group_id:
+            return Response({
+                "message": "This field is required",
+                "success": False,
+                "type": "goal name"
+            })
+     
+        else:
+            goali = _group.addMembers(request, lang, user)
+            # goalid = goal["goalid"]
+            if goali["success"] is True:
+                return Response({
+                    "data": goali,
+                    "success": True
+                })
+            else:
+                return Response({
+                    "message": goali,
+                    "success": False
+                })
+
+class DeleteGoalz(APIView):
+    authentication_classes = [SessionAuthentication, TokenAuthentication]
+    permission_classes = [IsAuthenticated]
+    http_method_names = ['post']
+
+    def post(self, request, lang, *args, **kwargs):
+        user = _user.getAuthUser(request, lang)
+        lang = DEFAULT_LANG if lang is None else lang
+        goal_name = request.data.get("goal_name")  # Use .get() to avoid KeyError
+        
+        if not goal_name:
+            return Response({
+                "message": "This field is required",
+                "success": False,
+                "type": "goal name"
+            })
+
+        goali = _goal.deleteGoal(request, lang, user)
+
+        # Check if goali is a Response object and extract its data
+        if isinstance(goali, Response):
+            goali_data = goali.data  # Extracting data from the Response object
+        else:
+            goali_data = goali  # Assuming it's already a dictionary
+
+        if goali_data.get("success") is True:
+            return Response({
+                "message": "Goal deleted successfully",
+                "success": True
+            })
+        else:
+            return Response({
+                "message": goali_data.get('message', 'An error occurred'),
+                "success": False
+            })
+  
 class GetGoalsByAuthUser(APIView):
     authentication_classes = [SessionAuthentication, TokenAuthentication]
     permission_classes = [IsAuthenticated]

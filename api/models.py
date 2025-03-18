@@ -739,3 +739,67 @@ class TopUp(models.Model):
 
     def __str__(self):
         return "%s" % self.topup_amount
+    
+    
+
+
+# Group model for group texting
+class Group(models.Model):
+    name = models.CharField(max_length=255)  # Group name
+    description = models.TextField(blank=True, null=True)  # Optional group description
+    profile_pic = models.ImageField(upload_to='group_pics/', blank=True, null=True)  # Group profile picture
+    created_at = models.DateTimeField(auto_now_add=True)  # Group creation time
+    created_by = models.ForeignKey(User, on_delete=models.CASCADE, related_name='created_groups')  # Group creator
+    last_activity = models.DateTimeField(auto_now=True)  # Last activity timestamp
+
+    def __str__(self):
+        return self.name
+
+
+# Participant model to track group members
+class Participant(models.Model):
+    group = models.ForeignKey(Group, on_delete=models.CASCADE, related_name='participants')  # Group the participant belongs to
+    user = models.ForeignKey(User, on_delete=models.CASCADE, related_name='group_participations')  # User in the group
+    role = models.CharField(max_length=50, default='member')  # Role in the group (e.g., admin, member)
+    joined_at = models.DateTimeField(auto_now_add=True)  # When the user joined the group
+    muted = models.BooleanField(default=False)  # Whether the user has muted the group
+
+    class Meta:
+        unique_together = ('group', 'user')  # Ensure a user can only join a group once
+
+    def __str__(self):
+        return f'{self.user.username} in {self.group.name}'
+
+
+# Media model for handling attachments (images, audio, etc.)
+class Media(models.Model):
+    file_path = models.FileField(upload_to='media/')  # Path to the media file
+    type = models.CharField(max_length=50)  # Type of media (e.g., image, audio, video)
+    mime_type = models.CharField(max_length=100, blank=True, null=True)  # MIME type of the file
+    file_size = models.IntegerField(blank=True, null=True)  # Size of the file in bytes
+    duration = models.IntegerField(blank=True, null=True)  # Duration for audio/video files
+    thumbnail_path = models.FileField(upload_to='thumbnails/', blank=True, null=True)  # Thumbnail for media
+    created_at = models.DateTimeField(auto_now_add=True)  # When the media was uploaded
+    deleted = models.BooleanField(default=False)  # Soft delete flag
+
+    def __str__(self):
+        return f'{self.type} - {self.file_path}'
+
+
+# Message model for group texting
+class Message(models.Model):
+    group = models.ForeignKey(Group, on_delete=models.CASCADE, related_name='messages')  # Group the message belongs to
+    sender = models.ForeignKey(User, on_delete=models.CASCADE, related_name='sent_messages')  # User who sent the message
+    message = models.TextField(blank=True, null=True)  # Text content of the message
+    media = models.ForeignKey(Media, on_delete=models.SET_NULL, blank=True, null=True)  # Attached media (if any)
+    type = models.CharField(max_length=50, default='text')  # Type of message (e.g., text, image, audio)
+    status = models.CharField(max_length=50, default='sent')  # Status of the message (e.g., sent, delivered, read)
+    timestamp = models.DateTimeField(auto_now_add=True)  # When the message was sent
+    reply_to = models.ForeignKey('self', on_delete=models.SET_NULL, blank=True, null=True, related_name='replies')  # Reply to another message
+    reply_to_message = models.TextField(blank=True, null=True)  # Text of the replied message
+    forwarded = models.BooleanField(default=False)  # Whether the message was forwarded
+    edited = models.BooleanField(default=False)  # Whether the message was edited
+    deleted = models.BooleanField(default=False)  # Soft delete flag
+
+    def __str__(self):
+        return f'{self.sender.username}: {self.message}'    
