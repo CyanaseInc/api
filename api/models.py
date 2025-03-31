@@ -4,7 +4,8 @@ from django.db.models.signals import post_save
 from django.dispatch import receiver
 from datetime import date
 from django.utils.translation import gettext_lazy as _
-
+from django.utils import timezone
+from django.conf import settings
 
 class SupportedLanguage(models.Model):
     lang_name = models.CharField(max_length=255)
@@ -755,6 +756,46 @@ class Group(models.Model):
     def __str__(self):
         return self.name
 
+class GroupDeposit(models.Model):
+    group = models.ForeignKey(Group, on_delete=models.CASCADE, related_name='deposits')  # Link to the Group model
+    member = models.ForeignKey(User, on_delete=models.CASCADE, related_name='group_deposits')  # Link to the User model
+    deposit_amount = models.DecimalField(max_digits=15, decimal_places=2)  # Amount deposited
+    currency = models.ForeignKey(Currency, on_delete=models.CASCADE, default=1)  # Link to Currency model, default to ID 1 (e.g., UGX)
+    deposit_date = models.DateTimeField()  # Date and time of the deposit
+    status = models.CharField(max_length=20, default='pending', choices=[
+        ('pending', 'Pending'),
+        ('completed', 'Completed'),
+        ('failed', 'Failed'),
+    ])  # Status of the deposit
+    reference = models.CharField(max_length=100, unique=True, blank=True, null=True)  # Unique transaction reference
+    created_at = models.DateTimeField(auto_now_add=True)  # When the deposit record was created
+    updated_at = models.DateTimeField(auto_now=True)  # When the deposit record was last updated
+
+    def __str__(self):
+        return f"{self.member.username} - {self.group.name} - {self.deposit_amount} {self.currency.currency_code}"
+
+# New GroupGoal model
+class GroupGoal(models.Model):
+    group = models.ForeignKey('Group', on_delete=models.CASCADE, related_name='goals')
+    goal_name = models.CharField(max_length=255)
+    target_amount = models.DecimalField(max_digits=15, decimal_places=2)
+    current_amount = models.DecimalField(max_digits=15, decimal_places=2, default=0.00)
+    start_date = models.DateTimeField()
+    end_date = models.DateTimeField(null=True, blank=True)
+    status = models.CharField(max_length=20, default='active', choices=[
+        ('active', 'Active'),
+        ('completed', 'Completed'),
+        ('cancelled', 'Cancelled'),
+    ])
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    def __str__(self):
+        return f"{self.group.name} - {self.goal_name} - {self.target_amount}"
+    class Meta:
+        verbose_name = "Group Goal"
+        verbose_name_plural = "Group Goals"
+        ordering = ['-start_date']
 
 # Participant model to track group members
 class Participant(models.Model):
@@ -770,8 +811,72 @@ class Participant(models.Model):
     def __str__(self):
         return f'{self.user.username} in {self.group.name}'
 
+class GroupGoalDeposit(models.Model):
+    group = models.ForeignKey('Group', on_delete=models.CASCADE, related_name='goal_deposits')
+    goal = models.ForeignKey(GroupGoal, on_delete=models.CASCADE, related_name='deposits')
+    member = models.ForeignKey(User, on_delete=models.CASCADE, related_name='group_goal_deposits')
+    deposit_amount = models.DecimalField(max_digits=15, decimal_places=2)
+    currency = models.ForeignKey('Currency', on_delete=models.CASCADE, default=1)
+    deposit_date = models.DateTimeField()
+    status = models.CharField(max_length=20, default='pending', choices=[
+        ('pending', 'Pending'),
+        ('completed', 'Completed'),
+        ('failed', 'Failed'),
+    ])
+    reference = models.CharField(max_length=100, unique=True, blank=True, null=True)
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
 
+    def __str__(self):
+        return f"{self.member.username} - {self.goal.goal_name} - {self.deposit_amount} {self.currency.currency_code}"
+
+    class Meta:
+        verbose_name = "Group Goal Deposit"
+        verbose_name_plural = "Group Goal Deposits"
+        ordering = ['-deposit_date']
 # Media model for handling attachments (images, audio, etc.)
+
+class GroupInvitation(models.Model):
+    group = models.ForeignKey('Group', on_delete=models.CASCADE, related_name='invitations')
+    token = models.CharField(max_length=64, unique=True, editable=False)
+    created_by = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.CASCADE, related_name='group_invites')
+    created_at = models.DateTimeField(auto_now_add=True)
+    expires_at = models.DateTimeField()  # When the link stops working
+    max_uses = models.PositiveIntegerField(default=1)  # 0 = unlimited uses
+    uses = models.PositiveIntegerField(default=0)  # How many times it's been used
+    is_active = models.BooleanField(default=True)  # Can be manually disabled
+
+    class Meta:
+        verbose_name = "Group Invitation"
+        verbose_name_plural = "Group Invitations"
+        indexes = [
+            models.Index(fields=['token']),  # Faster lookups for token-based access
+        ]
+
+    def __str__(self):
+        return f"Invite for {self.group.name} (Expires: {self.expires_at})"
+
+    def save(self, *args, **kwargs):
+        if not self.token:  # Auto-generate token if new
+            self.token = secrets.token_urlsafe(32)  # Cryptographically secure
+        if not self.expires_at:  # Default expiry: 7 days
+            self.expires_at = timezone.now() + timezone.timedelta(days=7)
+        super().save(*args, **kwargs)
+
+    def is_valid(self):
+        """Check if the invite can still be used."""
+        return (
+            self.is_active and
+            (self.max_uses == 0 or self.uses < self.max_uses) and
+            timezone.now() < self.expires_at
+        )
+
+    def mark_used(self):
+        """Increment usage count and deactivate if max uses reached."""
+        self.uses += 1
+        if self.max_uses > 0 and self.uses >= self.max_uses:
+            self.is_active = False
+        self.save()
 class Media(models.Model):
     file_path = models.FileField(upload_to='media/')  # Path to the media file
     type = models.CharField(max_length=50)  # Type of media (e.g., image, audio, video)

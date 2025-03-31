@@ -5,7 +5,7 @@ from django.utils import timezone
 from django.db import transaction, IntegrityError
 import os
 import random
-from .models import Deposit, AccountType, Goal, Group,Participant, Subscription, Withdraw, RiskProfile, Networth, NextOfKin, InvestmentOption, InvestmentPerformance, RiskAnalysis, BankTransaction, UserProfile, InvestmentClass, InvestmentTrack, Transaction
+from .models import Deposit, AccountType, Goal,GroupDeposit,GroupGoalDeposit,GroupGoal, GroupInvitation, Group,Participant, Subscription, Withdraw, RiskProfile, Networth, NextOfKin, InvestmentOption, InvestmentPerformance, RiskAnalysis, BankTransaction, UserProfile, InvestmentClass, InvestmentTrack, Transaction
 from .helper.helper import Helper
 # from .v1.locale import Locale
 from django.contrib.auth.models import User
@@ -21,6 +21,7 @@ from api.config import webconfig
 from django.db.models import Sum, Max
 from django.core.exceptions import ObjectDoesNotExist
 from datetime import date
+from dateutil.relativedelta import relativedelta 
 # live
 DEPOSIT_SEC_KEY = ""
 SUB_SEC_KEY = ""
@@ -1708,56 +1709,65 @@ class Groups:
             }
     
     def getGroup(self, request, lang, user=None):
-        
-        
-        try:
-            user_id = request.user.id
-            
-            user_participations = Participant.objects.filter(user_id=user_id).select_related('group')
-            group_list = []
+      try:
+        user_id = request.user.id
+        user_participations = Participant.objects.filter(user_id=user_id).select_related('group')
+        group_list = []
 
-            # Use a set to avoid duplicate groups (if user has multiple roles, though unlikely)
-            group_ids = set(participation.group.id for participation in user_participations)
+        for participation in user_participations:
+            group = participation.group
+            if group.id in {g['groupId'] for g in group_list}:  # Skip duplicates
+                continue
 
-            for group_id in group_ids:
-                group = Group.objects.get(id=group_id)
-                # Fetch all participants for this group
-                participants = Participant.objects.filter(group_id=group_id).select_related('user')
-                participant_list = [
-                    {
-                        "user_id": str(participant.user.id),
-                        "role": participant.role,
-                        "joined_at": participant.joined_at.strftime("%Y-%m-%d %H:%M:%S"),
-                        "muted": participant.muted
+            # Only generate invite link if user is an ADMIN/CREATOR
+            invite_url = None
+            if participation.role in ['ADMIN', 'CREATOR']:  # Adjust based on your roles
+                invite, created = GroupInvitation.objects.get_or_create(
+                    group=group,
+                    created_by=request.user,
+                    defaults={
+                        'max_uses': 0,  # Unlimited uses
+                        'expires_at': timezone.now() + timezone.timedelta(days=30)  # 30-day expiry
                     }
-                    for participant in participants
-                ]
+                )
+                invite_url = f"{settings.BASE_URL}/join/{invite.token}/"
 
-                group_data = {
-                    "groupId": group.id,
-                    "name": group.name,
-                    "description": group.description,
-                    "profile_pic": f"{group.profile_pic.url}" if group.profile_pic else "",
-                    "created_at": group.created_at.strftime("%Y-%m-%d %H:%M:%S"),
-                    "created_by": str(group.created_by.id),
-                    "last_activity": group.last_activity.strftime("%Y-%m-%d %H:%M:%S"),
-                    "participants": participant_list
+            participants = Participant.objects.filter(group_id=group.id).select_related('user')
+            participant_list = [
+                {
+                    "user_id": str(p.user.id),
+                    "role": p.role,
+                    "joined_at": p.joined_at.strftime("%Y-%m-%d %H:%M:%S"),
+                    "muted": p.muted
                 }
-                group_list.append(group_data)
+                for p in participants
+            ]
 
-            return {
-                "success": True,
-                "data": group_list,
-                "message": "Groups retrieved successfully"
-            }
+            group_list.append({
+                "groupId": group.id,
+                "name": group.name,
+                "description": group.description,
+                "profile_pic": group.profile_pic.url if group.profile_pic else None,
+                "created_at": group.created_at.strftime("%Y-%m-%d %H:%M:%S"),
+                "created_by": str(group.created_by.id),
+                "last_activity": group.last_activity.strftime("%Y-%m-%d %H:%M:%S"),
+                "participants": participant_list,
+                "invitation_link": invite_url,  # Only visible to admins
+                "invitation_expires": invite.expires_at.strftime("%Y-%m-%d %H:%M:%S") if invite_url else None
+            })
 
-        except Exception as e:
-            logger.error(f"Error retrieving groups for user {user_id}: {str(e)}")
-            return {
-                "success": False,
-                "message": f"Error retrieving groups: {str(e)}",
-            }
-   
+        return {
+            "success": True,
+            "data": group_list,
+            "message": "Groups retrieved successfully"
+        }
+
+      except Exception as e:
+        logger.error(f"Error retrieving groups for user {user_id}: {str(e)}")
+        return {
+            "success": False,
+            "message": f"Error retrieving groups: {str(e)}",
+        }
     def addMembers(self, request, lang, user=None):
         try:
             # Extract data from the request
@@ -1819,6 +1829,80 @@ class Groups:
                 "success": False
             }
     
+    def createGroupGoal(self, request, lang, user):
+        current_datetime = datetime.datetime.now()
+        goal_name = request.data.get("goal_name")
+        goal_period = request.data.get("goal_period")  # e.g., "12" (months)
+        goal_amount = request.data.get("goal_amount")  # e.g., "10000"
+        deposit_type = request.data.get("deposit_type")  # e.g., "manual" or "auto"
+        reminder_day = request.data.get("reminder_day")  # e.g., "Monday"
+        reminder_time = request.data.get("reminder_time")  # e.g., "14:30"
+        goal_type = request.data.get("goal_type")  # e.g., "Community Project"
+        group_id = request.data.get("group_id")  # Assuming group_id is sent from frontend
+        userid = request.user.id
+        is_verified = request.user.userprofile.is_verified
+
+        # Validation
+        required_fields = {
+            "goal_name": goal_name,
+            "goal_period": goal_period,
+            "goal_amount": goal_amount,
+            "group_id": group_id,
+        }
+        missing_fields = [key for key, value in required_fields.items() if not value]
+        if missing_fields:
+            return {
+                "message": f"Missing required fields: {', '.join(missing_fields)}",
+                "success": False
+            }
+
+        if not is_verified:
+            return {
+                "message": "Your account is not verified. Please check your email and verify.",
+                "success": False
+            }
+
+        try:
+            # Convert goal_period to integer for date calculation
+            goal_period_months = int(goal_period)
+            start_date = current_datetime
+            end_date = start_date + relativedelta(months=goal_period_months)
+
+            # Create the group goal
+            goal = GroupGoal.objects.create(
+                group=Group.objects.get(id=int(group_id)),  # Fetch group by ID
+                goal_name=goal_name,
+                target_amount=goal_amount,
+                current_amount=0.00,  # Default value
+                start_date=start_date,
+                end_date=end_date,
+                status='active',  # Default status
+            )
+            goal.save()
+          
+           
+
+            return {
+                "message": f"You have successfully created a group goal",
+                "success": True,
+                  "goal_id": goal.id 
+           
+            }
+        except Group.DoesNotExist:
+            return {
+                "message": "Group not found",
+                "success": False
+            }
+        except ValueError as e:
+            return {
+                "message": f"Invalid goal period: {str(e)}",
+                "success": False
+            }
+        except Exception as e:
+            return {
+                "message": f"Failed to create group goal: {str(e)}",
+                "success": False
+            }
    
     def editGroup(self, request, lang, user):
         # Extract data from the request
@@ -1864,8 +1948,270 @@ class Groups:
                 "message": f"Error updating group: {str(e)}",
                 "success": False
             }
-      
+    def groupDetails(self, request, lang, user=None):
+        try:
+        # Get the authenticated user's ID
+            user_id = request.user.id
+            group_id = request.data.get("groupid")
+
+            if not group_id:
+                return {
+                    "message": "Group ID is required",
+                    "success": False
+                }
+
+            # Fetch the group
+            try:
+                group = Group.objects.get(pk=group_id)
+            except Group.DoesNotExist:
+                return {
+                    "message": f"Group with ID {group_id} not found",
+                    "success": False
+                }
+
+            # Ensure the user is a participant in the group
+            if not Participant.objects.filter(group=group, user_id=user_id).exists():
+                return {
+                    "message": "You are not a participant in this group",
+                    "success": False
+                }
+
+            # 1. My Contributions (User's Group Deposits)
+            user_deposits = GroupDeposit.objects.filter(group=group, member_id=user_id).select_related('currency', 'member')
+            user_contributions = [
+                {
+                    "deposit_id": deposit.id,
+                    "amount": float(deposit.deposit_amount),
+                    "currency": deposit.currency.currency_code,
+                    "deposit_date": deposit.deposit_date.strftime("%Y-%m-%d %H:%M:%S"),
+                    "status": deposit.status,
+                    "reference": deposit.reference or ""
+                }
+                for deposit in user_deposits
+            ]
+            total_my_contribution = float(sum(deposit.deposit_amount for deposit in user_deposits if deposit.status == 'completed'))
+
+        # 2. Total Group Deposits (All Members)
+            all_group_deposits = GroupDeposit.objects.filter(group=group)
+            total_group_deposits = float(sum(deposit.deposit_amount for deposit in all_group_deposits if deposit.status == 'completed'))
+
+        # 3. Group Goals with Deposits (Including Who Contributed)
+            group_goals = GroupGoal.objects.filter(group=group)
+            goals_data = []
+            for goal in group_goals:
+                goal_deposits = GroupGoalDeposit.objects.filter(goal=goal).select_related('member')
+                goal_deposits_list = [
+                    {
+                        "deposit_id": deposit.id,
+                        "member_id": str(deposit.member.id),
+                        "member_full_name": f"{deposit.member.first_name} {deposit.member.last_name}".strip(),
+                        "amount": float(deposit.deposit_amount),
+                        "deposit_date": deposit.deposit_date.strftime("%Y-%m-%d %H:%M:%S"),
+                        "status": deposit.status,
+                        "reference": deposit.reference or ""
+                    }
+                    for deposit in goal_deposits
+                ]
+                goals_data.append({
+                    "goal_id": goal.id,
+                    "goal_name": goal.goal_name,
+                    "target_amount": float(goal.target_amount),
+                    "current_amount": float(goal.current_amount),
+                    "start_date": goal.start_date.strftime("%Y-%m-%d %H:%M:%S"),
+                    "end_date": goal.end_date.strftime("%Y-%m-%d %H:%M:%S") if goal.end_date else None,
+                    "status": goal.status,
+                    "deposits": goal_deposits_list  # Shows who contributed per goal with full names
+                })
+
+           # Construct the response
+            response_data = {
+                "group_id": group.id,
+                "group_name": group.name,
+                "my_contributions": {  # Your deposits in GroupDeposit
+                    "total": total_my_contribution,
+                    "deposits": user_contributions
+                },
+                "total_group_deposits": total_group_deposits,  # Sum of all GroupDeposit
+                "group_goals": goals_data  # Goals with deposits by all members
+            }
+
+            return {
+                "success": True,
+                "data": response_data,
+                "message": "Group contributions and goals retrieved successfully"
+            }
+
+        except Exception as e:
+            logger.error(f"Error retrieving group contributions and goals: {str(e)}")
+            return {
+                "success": False,
+                "message": f"Error retrieving data: {str(e)}"
+            }
+    
+    def editGoal(self, request, lang, user):
+    
+        
+    
+         # Extract data from the request
+        goal_id = request.data["goal_id"]
+        goal_name = request.data["goal_name"]
+    
+        try:
+           
+            goal = GroupGoal.objects.get(pk=goal_id)
+         
+    
+            # Update goal_name
+            goal.goal_name = goal_name
+            goal.save()
+
+
+            return {
+                "message": f"Goal '{goal_name}' updated successfully",
+                "success": True,
+                "goal_id": goal_id,
+               
+            }
+        except Exception as e:
+            return {
+                "message": f"Error updating goal: {str(e)}",
+                "success": False
+            }  
+    
+    def deleteGoal(self, request, lang, user):
+        try:
+        # Assuming the goal ID is passed in the request body
+            goal_id = request.data.get('goal_id')
+            print ('goal', goal_id)
+            if not goal_id:
+                return Response({"error": "Goal ID is required"}, status=400)
+        
+        # Fetch the goal from the database
+            goal = GroupGoal.objects.filter(pk=goal_id).first()
+        
+            if not goal:
+                return Response({"error": "Goal not found"}, status=404)
+        
+        # Delete the goal
+            goal.delete()
+        
+            return Response({"success": True, "message": "Goal deleted"}, status=200)
+    
+        except Exception as e:
+           return Response({"error": str(e)}, status=500)
+    def deleteGroupPic(self, request, lang, user):
+        try:
+            # Get group ID from request data
+            group_id = request.data.get('group_id')
             
+            if not group_id:
+                return Response({
+                    "message": "Group ID is required",
+                    "success": False
+                }, status=400)
+            
+            # Get the group instance
+            try:
+                group = Group.objects.get(pk=group_id)
+            except Group.DoesNotExist:
+                return Response({
+                    "message": "Group not found",
+                    "success": False
+                }, status=404)
+            
+            # Check if user has permission to delete the picture
+            # (Add your permission logic here, e.g., group admin check)
+            
+            # Delete the picture if it exists
+            if group.profile_pic:
+                # Delete the file from storage
+                if default_storage.exists(group.profile_pic.name):
+                    default_storage.delete(group.profile_pic.name)
+                
+                # Clear the field in the model
+                group.profile_pic.delete(save=False)
+                group.profile_pic = None
+                group.save()
+                
+                return Response({
+                    "message": "Group picture deleted successfully",
+                    "success": True
+                }, status=200)
+            else:
+                return Response({
+                    "message": "Group has no picture to delete",
+                    "success": True
+                }, status=200)
+                
+        except Exception as e:
+            return Response({
+                "message": f"An error occurred: {str(e)}",
+                "success": False
+            }, status=500)
+    def changeGroupPic(self, request, lang, user):
+     try:
+        # Get group ID from request data
+        group_id = request.data.get('group_id')
+        
+        if not group_id:
+            return Response({
+                "message": "Group ID is required",
+                "success": False
+            }, status=400)
+        
+        # Get the group instance
+        try:
+            group = Group.objects.get(pk=group_id)
+        except Group.DoesNotExist:
+            return Response({
+                "message": "Group not found",
+                "success": False
+            }, status=404)
+        
+        # Check if user has permission (add your specific logic here)
+        # if not user.has_perm('change_group_pic', group):
+        #     return Response({
+        #         "message": "You don't have permission to change this group's picture",
+        #         "success": False
+        #     }, status=403)
+        
+        # Handle file upload if new picture is provided
+        new_pic = request.FILES.get('profile_pic')
+        if new_pic:
+            # Delete old picture if exists
+            if group.profile_pic:
+                group.profile_pic.delete(save=False)
+            
+            # Save new picture
+            group.profile_pic = new_pic
+            group.save()
+            
+            return Response({
+                "message": "Group picture updated successfully",
+                "success": True,
+                "profile_pic_url": group.profile_pic.url
+            }, status=200)
+        
+        # Handle picture deletion if no new picture is provided
+        elif group.profile_pic:
+            group.profile_pic.delete()
+            group.save()
+            return Response({
+                "message": "Group picture deleted successfully",
+                "success": True
+            }, status=200)
+        
+        # No picture to delete
+        return Response({
+            "message": "No action taken - group has no picture and no new picture was provided",
+            "success": True
+        }, status=200)
+            
+     except Exception as e:
+        return Response({
+            "message": f"An error occurred: {str(e)}",
+            "success": False
+        }, status=500)
 class Goals:
     def __init__(self):
         self.help = Helper()

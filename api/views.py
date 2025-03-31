@@ -853,7 +853,58 @@ class CreateGoal(APIView):
                     "success": False
                 })
                 
-                
+class CreateGroupGoal(APIView):
+    authentication_classes = [SessionAuthentication, TokenAuthentication]
+    permission_classes = [IsAuthenticated]
+    http_method_names = ['post']
+
+    def post(self, request, lang, *args, **kwargs):
+        user = _user.getAuthUser(request, lang)
+        lang = DEFAULT_LANG if lang is None else lang
+        goal_name = request.data["goal_name"]
+        goal_period = request.data["goal_period"]
+        goal_amount = request.data["goal_period"]
+        deposit_type = request.data["deposit_type"]
+      
+        if not goal_name:
+            return Response({
+                "message": "This field is required",
+                "success": False,
+                "type": "goal name"
+            })
+        elif not goal_period:
+            return Response({
+                "message": "This field is required",
+                "success": False,
+                "type": "goal period"
+            })
+        elif not goal_amount:
+            return Response({
+                "message": "This field is required",
+                "success": False,
+                "type": "goal amount"
+            })
+        elif not deposit_type:
+            return Response({
+                "message": "This field is required",
+                "success": False,
+                "type": "deposit type"
+            })
+      
+        else:
+            goal = _group.createGroupGoal(request, lang, user)
+            print('goal', goal) 
+            if goal["success"] is True:
+                return Response({
+                    "message": "Goal created successfully",
+                    "success": True
+                })
+            else:
+                return Response({
+                    "message": "Goal not created, account is not verified",
+                    "success": False
+                })
+                 
                 
 class EditGoalz(APIView):
     authentication_classes = [SessionAuthentication, TokenAuthentication]
@@ -887,6 +938,39 @@ class EditGoalz(APIView):
                     "message": goali['message'],
                     "success": False
                 })
+class EditGroupGoal(APIView):
+    authentication_classes = [SessionAuthentication, TokenAuthentication]
+    permission_classes = [IsAuthenticated]
+    http_method_names = ['post']
+
+    def post(self, request, lang, *args, **kwargs):
+        user = _user.getAuthUser(request, lang)
+        lang = DEFAULT_LANG if lang is None else lang
+        goal_name = request.data["goal_name"]
+        
+       
+       
+        if not goal_name:
+            return Response({
+                "message": "This field is required",
+                "success": False,
+                "type": "goal name"
+            })
+     
+        else:
+            goali = _group.editGoal(request, lang, user)
+            # goalid = goal["goalid"]
+            if goali["success"] is True:
+                return Response({
+                    "message": "Goal created successfully",
+                    "success": True
+                })
+            else:
+                return Response({
+                    "message": goali['message'],
+                    "success": False
+                })
+
 class EditGroup(APIView):
     authentication_classes = [SessionAuthentication, TokenAuthentication]
     permission_classes = [IsAuthenticated]
@@ -914,8 +998,116 @@ class EditGroup(APIView):
                     "message": data["message"],
                     "success": False
                 }, status=400)
+class DeleteGroupGoal(APIView):
+    authentication_classes = [SessionAuthentication, TokenAuthentication]
+    permission_classes = [IsAuthenticated]
+    http_method_names = ['post']
 
-           
+    def post(self, request, lang, *args, **kwargs):
+        user = _user.getAuthUser(request, lang)
+        lang = DEFAULT_LANG if lang is None else lang
+    
+        goal = _group.deleteGoal(request, lang, user)
+
+        # Check if goali is a Response object and extract its data
+        if isinstance(goal, Response):
+            goal_data = goal.data  # Extracting data from the Response object
+        else:
+            goal_data = goal  # Assuming it's already a dictionary
+
+        if goal_data.get("success") is True:
+            return Response({
+                "message": "Goal deleted successfully",
+                "success": True
+            })
+        else:
+            return Response({
+                "message": goal_data.get('message', 'An error occurred'),
+                "success": False
+            })
+  
+     
+    authentication_classes = [SessionAuthentication, TokenAuthentication]
+    permission_classes = [IsAuthenticated]
+    http_method_names = ['post']
+
+    def post(self, request, lang, *args, **kwargs):
+        user = _user.getAuthUser(request, lang)
+        lang = DEFAULT_LANG if lang is None else lang
+        group_name = request.data.get("name")  # Match Flutter's 'name'
+
+        if not group_name:
+            return Response({
+                "message": "This field is required",
+                "success": False,
+            }, status=400)
+        else:
+            data = _group.editGroup(request, lang, user)
+            if data["success"] is True:
+                return Response({
+                    "message": "Group updated successfully",
+                    "success": True
+                }, status=200)
+            else:
+                return Response({
+                    "message": data["message"],
+                    "success": False
+                }, status=400)
+class DeleteGroupPic(APIView):
+    authentication_classes = [SessionAuthentication, TokenAuthentication]
+    permission_classes = [IsAuthenticated]
+    http_method_names = ['post']
+
+    def post(self, request, lang, *args, **kwargs):
+        user = _user.getAuthUser(request, lang)
+        lang = DEFAULT_LANG if lang is None else lang
+    
+        goal = _group.deleteGroupPic(request, lang, user)
+
+        # Check if goali is a Response object and extract its data
+        if isinstance(goal, Response):
+            goal_data = goal.data  # Extracting data from the Response object
+        else:
+            goal_data = goal  # Assuming it's already a dictionary
+
+        if goal_data.get("success") is True:
+            return Response({
+                "message": "Goal deleted successfully",
+                "success": True
+            })
+        else:
+            return Response({
+                "message": goal_data.get('message', 'An error occurred'),
+                "success": False
+            })
+class ChangeGroupPic(APIView):
+    authentication_classes = [SessionAuthentication, TokenAuthentication]
+    permission_classes = [IsAuthenticated]
+    http_method_names = ['post']
+
+    def post(self, request, lang, *args, **kwargs):
+        user = _user.getAuthUser(request, lang)
+        lang = DEFAULT_LANG if lang is None else lang
+    
+        goal = _group.changeGroupPic(request, lang, user)
+
+        # Check if goali is a Response object and extract its data
+        if isinstance(goal, Response):
+            goal_data = goal.data  # Extracting data from the Response object
+        else:
+            goal_data = goal  # Assuming it's already a dictionary
+
+        if goal_data.get("success") is True:
+            return Response({
+                "message": "Goal deleted successfully",
+                "success": True
+            })
+        else:
+            return Response({
+                "message": goal_data.get('message', 'An error occurred'),
+                "success": False
+            })
+        
 class NewGroup(APIView):
     authentication_classes = [SessionAuthentication, TokenAuthentication]
     permission_classes = [IsAuthenticated]
@@ -1003,7 +1195,46 @@ class AddMembers(APIView):
                     "message": goali,
                     "success": False
                 })
+class DetailsGroup(APIView):
+    authentication_classes = [SessionAuthentication, TokenAuthentication]
+    permission_classes = [IsAuthenticated]
+    http_method_names = ['post']
 
+    def post(self, request, lang, *args, **kwargs):
+        user = _user.getAuthUser(request, lang)
+        lang = DEFAULT_LANG if lang is None else lang
+        group_id = request.data["groupid"]
+        
+       
+       
+        if not group_id:
+            return Response({
+                "message": "This field is required",
+                "success": False,
+                "type": "goal name"
+            })
+     
+        else:
+            group = _group.groupDetails(request, lang, user)
+          
+            if group["success"] is True:
+                return Response({
+                    "data": group,
+                    "success": True
+                })
+            else:
+                return Response({
+                    "message": group,
+                    "success": False
+                })
+class  Invite(APIView):
+
+    http_method_names = ['post']
+    def post(self, request, lang, *args, **kwargs):
+        user = _user.getAuthUser(request, lang)
+        lang = DEFAULT_LANG if lang is None else lang
+        group_id = request.data["groupid"]
+    
 class DeleteGoalz(APIView):
     authentication_classes = [SessionAuthentication, TokenAuthentication]
     permission_classes = [IsAuthenticated]
